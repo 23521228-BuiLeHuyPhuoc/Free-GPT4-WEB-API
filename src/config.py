@@ -84,35 +84,25 @@ class Config:
     def available_providers(self) -> Dict[str, Any]:
         """Get available providers."""
         import g4f
-        return {
-            "Auto": "",
-            # "ARTA": g4f.Provider.ARTA, # Removed in g4f > 0.2.0
-            # "Blackbox": g4f.Provider.Blackbox, # Removed
-            "BlackboxPro": g4f.Provider.BlackboxPro,
-            # "Chatai": g4f.Provider.Chatai,  # Temporarily disabled due to 401 errors
-            "Cloudflare": g4f.Provider.Cloudflare,
-            "Copilot": g4f.Provider.Copilot,
-            "DDGS": g4f.Provider.DDGS, # DuckDuckGo replacement
-            "DeepInfra": g4f.Provider.DeepInfra,
-            # "DuckDuckGo": g4f.Provider.DuckDuckGo, # Removed
-            "Gemini": g4f.Provider.Gemini,
-            "HuggingChat": g4f.Provider.HuggingChat,
-            "LambdaChat": g4f.Provider.LambdaChat,
-            "LMArena": g4f.Provider.LMArena,
-            # "OIVSCodeSer0501": g4f.Provider.OIVSCodeSer0501,
-            # "OpenAIFM": g4f.Provider.OpenAIFM,
-            "OpenaiChat": g4f.Provider.OpenaiChat,
-            "Perplexity": g4f.Provider.Perplexity,
-            # "PerplexityLabs": g4f.Provider.PerplexityLabs, # Removed
-            "Pi": g4f.Provider.Pi,
-            "PollinationsAI": g4f.Provider.PollinationsAI,
-            # "PollinationsImage": g4f.Provider.PollinationsImage,  # Image provider
-            "TeachAnything": g4f.Provider.TeachAnything,
-            "Together": g4f.Provider.Together,
-            "WeWordle": g4f.Provider.WeWordle,
-            "You": g4f.Provider.You,
-            "Yqcloud": g4f.Provider.Yqcloud,
-        }
+        
+        providers = {"Auto": ""}
+        
+        # Dynamically load all available providers
+        if hasattr(g4f.Provider, '__providers__'):
+            for provider_class in g4f.Provider.__providers__:
+                if hasattr(provider_class, '__name__'):
+                    providers[provider_class.__name__] = provider_class
+        elif hasattr(g4f.Provider, '__all__'):
+            for provider_name in g4f.Provider.__all__:
+                if not provider_name.startswith("__"):
+                    try:
+                        provider = getattr(g4f.Provider, provider_name)
+                        if type(provider) is type and hasattr(provider, 'working'):
+                            providers[provider_name] = provider
+                    except AttributeError:
+                        continue
+                        
+        return providers
     
     @property
     def generic_models(self) -> list:
