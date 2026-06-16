@@ -333,9 +333,18 @@ def index():
             
             # Extract question from request
             question = None
+            model_override = None
+            provider_override = None
+            system_prompt_override = None
             if request.method == "GET":
                 question = request.args.get(server_manager.args.keyword)
+                model_override = request.args.get("model")
+                provider_override = request.args.get("provider")
+                system_prompt_override = request.args.get("system_prompt")
             else:
+                model_override = request.form.get("model")
+                provider_override = request.form.get("provider")
+                system_prompt_override = request.form.get("system_prompt")
                 # Handle file upload
                 if 'file' in request.files:
                     file = request.files['file']
@@ -350,6 +359,9 @@ def index():
             
             # Sanitize input
             question = sanitize_input(question, 10000)  # 10KB limit
+            model_override = sanitize_input(model_override, 100) if model_override else None
+            provider_override = sanitize_input(provider_override, 100) if provider_override else None
+            system_prompt_override = sanitize_input(system_prompt_override, 2000) if system_prompt_override else None
             
             # Verify token access
             token = request.args.get("token")
@@ -368,6 +380,9 @@ def index():
             response_text = await ai_service.generate_response(
                 message=question,
                 username=username,
+                provider=provider_override,
+                model=model_override,
+                system_prompt=system_prompt_override,
                 use_history=server_manager.args.enable_history,
                 remove_sources=server_manager.args.remove_sources,
                 use_proxies=server_manager.args.enable_proxies,
