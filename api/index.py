@@ -30,7 +30,7 @@ load_local_env(ROOT_DIR / ".env")
 os.environ.setdefault("FREEGPT4_ENABLE_GUI", "false")
 os.environ.setdefault("FREEGPT4_ENABLE_HISTORY", "false")
 os.environ.setdefault("FREEGPT4_REMOVE_SOURCES", "true")
-os.environ.setdefault("DEFAULT_MODEL", "gpt-4o")
+os.environ.setdefault("DEFAULT_MODEL", "gpt-4")
 os.environ.setdefault("DEFAULT_PROVIDER", "PollinationsAI")
 
 try:

@@ -128,7 +128,7 @@ class Config:
     @property
     def generic_models(self) -> list:
         """Get generic models."""
-        return ["gpt-4", "gpt-4o", "gpt-4o-mini"]
+        return ["gpt-4"]
 
 # Global config instance
 config = Config()

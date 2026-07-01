@@ -249,11 +249,8 @@ class AIService:
         if not api_key:
             raise AIProviderError("OPENAI_API_KEY is required for official OpenAI models")
 
-        model_aliases = {
-            "gpt4o": "gpt-4o",
-            "gpt-4o-free": "gpt-4o",
-        }
-        requested_model = (model or "gpt-4o").strip()
+        model_aliases = {}
+        requested_model = (model or "gpt-4").strip()
         model_name = os.getenv("OPENAI_MODEL") or model_aliases.get(requested_model.lower(), requested_model)
         base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 

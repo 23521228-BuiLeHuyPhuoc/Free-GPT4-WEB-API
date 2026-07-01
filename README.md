@@ -222,7 +222,7 @@ Enable proxies to mitigate blocks:
 
 ### Models and providers
 
-- **Models**: gpt-4, gpt-4o, deepseek-r1, and other modern LLMs
+- **Models**: gpt-4, gpt-4, deepseek-r1, and other modern LLMs
 - **Default model**: `gpt-4`
 - **Default provider**: `DuckDuckGo` (reliable fallback)
 - **Provider Fallback**: Automatic switching between Bing, DuckDuckGo, and other providers
@@ -230,7 +230,7 @@ Enable proxies to mitigate blocks:
 
 Change via flags or in the GUI:
 ```bash
---model gpt-4o --provider Bing
+--model gpt-4 --provider Bing
 ```
 
 ### Reliability Features
