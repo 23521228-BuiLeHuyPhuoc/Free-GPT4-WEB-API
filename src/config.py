@@ -7,12 +7,12 @@ from pathlib import Path
 
 # Base configuration
 BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("FREEGPT4_DATA_DIR") or ("/tmp/freegpt4-data" if os.getenv("VERCEL") else BASE_DIR / "data"))
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
 # Ensure data directory exists
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 @dataclass
 class DatabaseConfig:

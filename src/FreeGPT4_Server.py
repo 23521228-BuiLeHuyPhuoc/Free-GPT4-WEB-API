@@ -50,6 +50,8 @@ app.secret_key = config.security.secret_key
 app.config['UPLOAD_FOLDER'] = config.files.upload_folder
 app.config['MAX_CONTENT_LENGTH'] = config.server.max_content_length
 
+server_manager = None
+
 # Set up logging
 if os.getenv('LOG_LEVEL'):
     setup_logging(level=os.getenv('LOG_LEVEL'))
@@ -158,6 +160,57 @@ class ServerArgumentParser:
         """Parse command line arguments."""
         self.args, _ = self.parser.parse_known_args()
         return self.args
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+def build_runtime_args():
+    """Build runtime args from CLI plus environment defaults."""
+    args = ServerArgumentParser().parse_args()
+
+    args.port = args.port or config.server.port
+    args.model = args.model or config.api.default_model
+    args.provider = args.provider or config.api.default_provider
+    args.keyword = args.keyword or config.api.default_keyword
+
+    if os.getenv("FREEGPT4_MODEL") and not os.getenv("DEFAULT_MODEL"):
+        args.model = os.getenv("FREEGPT4_MODEL")
+    if os.getenv("FREEGPT4_PROVIDER") and not os.getenv("DEFAULT_PROVIDER"):
+        args.provider = os.getenv("FREEGPT4_PROVIDER")
+
+    args.enable_gui = env_bool("FREEGPT4_ENABLE_GUI", args.enable_gui)
+    args.private_mode = env_bool("FREEGPT4_PRIVATE_MODE", args.private_mode)
+    args.enable_history = env_bool("FREEGPT4_ENABLE_HISTORY", args.enable_history)
+    args.enable_proxies = env_bool("FREEGPT4_ENABLE_PROXIES", args.enable_proxies)
+    args.remove_sources = env_bool("FREEGPT4_REMOVE_SOURCES", args.remove_sources)
+    args.file_input = env_bool("FREEGPT4_FILE_INPUT", args.file_input)
+    args.enable_virtual_users = env_bool("FREEGPT4_ENABLE_VIRTUAL_USERS", args.enable_virtual_users)
+
+    return args
+
+def initialize_runtime(setup_password: bool = False):
+    """Initialize global runtime state for local and serverless hosts."""
+    global server_manager
+    if server_manager is None:
+        server_manager = ServerManager(build_runtime_args())
+        if setup_password:
+            server_manager.setup_password()
+    return server_manager
+
+def request_api_key_is_valid() -> bool:
+    """Optionally protect the API with FREEGPT4_API_KEY or FREEGPT4_TOKEN."""
+    expected = os.getenv("FREEGPT4_API_KEY") or os.getenv("FREEGPT4_TOKEN")
+    if not expected:
+        return True
+
+    provided = request.args.get("token") or request.headers.get("x-api-key") or request.headers.get("authorization") or ""
+    provided = provided.strip()
+    if provided.lower().startswith("bearer "):
+        provided = provided[7:].strip()
+    return provided == expected
 
 class ServerManager:
     """Manage server configuration and state."""
@@ -325,6 +378,7 @@ def handle_general_exception(e):
 def index():
     """Main API endpoint for chat completion."""
     import asyncio
+    initialize_runtime(setup_password=False)
     
     async def _async_index():
         try:
@@ -356,6 +410,8 @@ def index():
             
             if not question:
                 return "<p id='response'>Please enter a question</p>"
+            if not request_api_key_is_valid():
+                return "<p id='response'>Invalid token</p>", 401
             
             # Sanitize input
             question = sanitize_input(question, 10000)  # 10KB limit
@@ -713,16 +769,9 @@ def favicon():
 def main():
     """Main entry point."""
     try:
-        # Parse arguments
-        arg_parser = ServerArgumentParser()
-        args = arg_parser.parse_args()
-        
         # Initialize server manager
-        global server_manager
-        server_manager = ServerManager(args)
-        
-        # Set up password if needed
-        server_manager.setup_password()
+        manager = initialize_runtime(setup_password=True)
+        args = manager.args
         
         logger.info(f"Server configuration:")
         logger.info(f"  Port: {args.port}")
