@@ -1,11 +1,13 @@
 """AI service for handling GPT interactions."""
 
 import json
+import os
 import random
 from typing import Dict, List, Any, Optional, AsyncGenerator
 from pathlib import Path
 
 import g4f
+from aiohttp import ClientSession, ClientTimeout
 
 from config import config
 from database import db_manager
@@ -82,11 +84,7 @@ class AIService:
                     "message_history": use_history and user_data.get("message_history", False)
                 }
             
-            # Validate provider and model
-            is_valid, error_msg = validate_provider(user_settings["provider"], self.config.available_providers)
-            if not is_valid:
-                raise ValidationError(error_msg)
-            
+            # Validate model
             is_valid, error_msg = validate_model(user_settings["model"])
             if not is_valid:
                 raise ValidationError(error_msg)
@@ -99,20 +97,34 @@ class AIService:
                 use_history=user_settings["message_history"]
             )
             
-            # Prepare cookies
-            cookies = self._load_cookies(cookie_file)
-            
-            # Prepare proxy
-            proxy = self._get_proxy() if use_proxies else None
-            
-            # Generate response
-            response_text = await self._call_ai_api(
-                chat_history=chat_history,
-                provider=user_settings["provider"],
-                model=user_settings["model"],
-                cookies=cookies,
-                proxy=proxy
-            )
+            provider_name = user_settings["provider"]
+
+            if self._should_use_openai_direct(user_settings["model"], provider_name):
+                response_text = await self._call_openai_chat_completion(
+                    chat_history=chat_history,
+                    model=user_settings["model"]
+                )
+                provider_name = "OpenAI"
+            else:
+                # Validate provider only for the g4f route. Official OpenAI uses OPENAI_API_KEY.
+                is_valid, error_msg = validate_provider(user_settings["provider"], self.config.available_providers)
+                if not is_valid:
+                    raise ValidationError(error_msg)
+
+                # Prepare cookies
+                cookies = self._load_cookies(cookie_file)
+
+                # Prepare proxy
+                proxy = self._get_proxy() if use_proxies else None
+
+                # Generate response
+                response_text = await self._call_ai_api(
+                    chat_history=chat_history,
+                    provider=user_settings["provider"],
+                    model=user_settings["model"],
+                    cookies=cookies,
+                    proxy=proxy
+                )
             
             # Clean response if needed
             if remove_sources:
@@ -123,7 +135,7 @@ class AIService:
                 chat_history.append({"role": "assistant", "content": response_text})
                 self.db.save_chat_history(username, json.dumps(chat_history))
             
-            logger.info(f"AI response generated for user '{username}' using provider '{user_settings['provider']}'")
+            logger.info(f"AI response generated for user '{username}' using provider '{provider_name}'")
             return response_text
             
         except (ValidationError, AIProviderError):
@@ -213,6 +225,73 @@ class AIService:
             logger.debug(f"Using proxy: {proxy_url.split('@')[0]}@***")  # Mask credentials
         
         return proxy_url
+
+    def _openai_api_key(self) -> str:
+        return (os.getenv("OPENAI_API_KEY") or os.getenv("FREEGPT4_OPENAI_API_KEY") or "").strip()
+
+    def _should_use_openai_direct(self, model: str, provider: Optional[str]) -> bool:
+        if not self._openai_api_key():
+            return False
+
+        normalized_model = (model or "").strip().lower()
+        normalized_provider = (provider or "").strip().lower()
+        if normalized_provider in {"openai", "officialopenai", "official-openai"}:
+            return True
+
+        return normalized_model.startswith(("gpt-", "o1", "o3", "o4"))
+
+    async def _call_openai_chat_completion(
+        self,
+        chat_history: List[Dict[str, str]],
+        model: str
+    ) -> str:
+        api_key = self._openai_api_key()
+        if not api_key:
+            raise AIProviderError("OPENAI_API_KEY is required for official OpenAI models")
+
+        model_aliases = {
+            "gpt4o": "gpt-4o",
+            "gpt-4o-free": "gpt-4o",
+        }
+        requested_model = (model or "gpt-4o").strip()
+        model_name = os.getenv("OPENAI_MODEL") or model_aliases.get(requested_model.lower(), requested_model)
+        base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+
+        payload = {
+            "model": model_name,
+            "messages": chat_history,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        timeout = ClientTimeout(total=TimeoutConfig.DEFAULT_TIMEOUT)
+        async with ClientSession(timeout=timeout) as session:
+            async with session.post(f"{base_url}/chat/completions", json=payload, headers=headers) as response:
+                body = await response.text()
+                if response.status >= 400:
+                    raise AIProviderError(f"OpenAI API error {response.status}: {body[:300]}")
+
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise AIProviderError(f"OpenAI API returned invalid JSON: {exc}") from exc
+
+        choices = data.get("choices") or []
+        if not choices:
+            raise AIProviderError("OpenAI API returned no choices")
+
+        content = (choices[0].get("message") or {}).get("content")
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in content
+            )
+        if not content:
+            raise AIProviderError("OpenAI API returned empty content")
+
+        return str(content)
     
     async def _call_ai_api(
         self,

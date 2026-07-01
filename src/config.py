@@ -7,12 +7,33 @@ from pathlib import Path
 
 # Base configuration
 BASE_DIR = Path(__file__).parent
-DATA_DIR = Path(os.getenv("FREEGPT4_DATA_DIR") or ("/tmp/freegpt4-data" if os.getenv("VERCEL") else BASE_DIR / "data"))
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
-# Ensure data directory exists
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+def resolve_data_dir() -> Path:
+    configured_dir = os.getenv("FREEGPT4_DATA_DIR")
+    candidates = []
+
+    if configured_dir:
+        candidates.append(Path(configured_dir))
+    if os.getenv("VERCEL"):
+        candidates.append(Path("/tmp/freegpt4-data"))
+    candidates.append(BASE_DIR / "data")
+    candidates.append(Path("/tmp/freegpt4-data"))
+
+    last_error = None
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate
+        except OSError as exc:
+            last_error = exc
+
+    raise RuntimeError(f"Unable to create a writable data directory: {last_error}")
+
+
+DATA_DIR = resolve_data_dir()
 
 @dataclass
 class DatabaseConfig:

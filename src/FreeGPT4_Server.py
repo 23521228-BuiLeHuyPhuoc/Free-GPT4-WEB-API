@@ -18,7 +18,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 from g4f.api import run_api
 
-from config import config
+from config import STATIC_DIR, TEMPLATES_DIR, config
 from database import db_manager
 from auth import auth_service, require_auth, require_token_auth
 from ai_service import ai_service
@@ -45,7 +45,11 @@ from utils.helpers import (
 )
 
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=str(TEMPLATES_DIR),
+    static_folder=str(STATIC_DIR),
+)
 app.secret_key = config.security.secret_key
 app.config['UPLOAD_FOLDER'] = config.files.upload_folder
 app.config['MAX_CONTENT_LENGTH'] = config.server.max_content_length
@@ -222,9 +226,8 @@ class ServerManager:
         self._merge_settings_with_args()
     
     def _setup_working_directory(self):
-        """Set up working directory."""
-        script_path = Path(__file__).resolve()
-        os.chdir(script_path.parent)
+        """Ensure runtime directories exist without changing process cwd."""
+        Path(config.files.upload_folder).mkdir(parents=True, exist_ok=True)
     
     def _merge_settings_with_args(self):
         """Merge database settings with command line arguments."""
