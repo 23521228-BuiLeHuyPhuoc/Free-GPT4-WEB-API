@@ -33,7 +33,22 @@ os.environ.setdefault("FREEGPT4_REMOVE_SOURCES", "true")
 os.environ.setdefault("DEFAULT_MODEL", "gpt-4o")
 os.environ.setdefault("DEFAULT_PROVIDER", "PollinationsAI")
 
-from FreeGPT4_Server import app, initialize_runtime
+try:
+    from FreeGPT4_Server import app, initialize_runtime
 
-initialize_runtime(setup_password=False)
+    initialize_runtime(setup_password=False)
+except Exception as exc:
+    from flask import Flask, jsonify
+
+    startup_error = f"{type(exc).__name__}: {exc}"
+    app = Flask(__name__)
+
+    @app.route("/", defaults={"path": ""}, methods=["GET", "POST"])
+    @app.route("/<path:path>", methods=["GET", "POST"])
+    def startup_failed(path):
+        return jsonify({
+            "error": "FreeGPT4 startup failed",
+            "detail": startup_error,
+        }), 500
+
 application = app
